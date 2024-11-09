@@ -1,0 +1,48 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - USER_ID=${USER_ID:-1000}
+        - GROUP_ID=${GROUP_ID:-1000}
+    image: "hr-rsummh/app"
+    environment:
+      - AUTORUN_ENABLED=true
+      - APP_PORT=${APP_PORT-:8081}
+    ports:
+      - "${APP_PORT-:8081}:8080"
+    volumes:
+      - .:/var/www/html:cached
+    healthcheck:
+      test: [ "CMD", "curl --insecure --silent --location --show-error --fail http://localhost:8080${HEALTHCHECK_PATH-:'/health'}" ]
+      interval: 30s
+      timeout: 1s
+      retries: 5
+      start_period: 30s
+
+  task:
+    image: "hr-rsummh/app"
+    depends_on:
+      - app
+    command: [ 'php', '/var/www/html/artisan', 'schedule:work' ]
+    stop_signal: SIGTERM
+    volumes:
+      - .:/var/www/html:cached
+    healthcheck:
+      # This is our native healthcheck script for the scheduler
+      test: [ "CMD", "healthcheck-schedule" ]
+      start_period: 10s
+
+  queue:
+    image: "hr-rsummh/app"
+    depends_on:
+      - app
+    command: [ 'php', '/var/www/html/artisan', 'queue:work', '--tries=3' ]
+    stop_signal: SIGTERM
+    volumes:
+      - .:/var/www/html:cached
+    healthcheck:
+      # This is our native healthcheck script for the scheduler
+      test: [ "CMD", "healthcheck-queue" ]
+      start_period: 10s
